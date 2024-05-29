@@ -1,0 +1,165 @@
+MegaDepth(
+descriptor : config_file,
+scene_list_path =  'datasets/megadepth_utils/train_scenes_disk.txt',
+scene_info_path = /path/to/preprocessing/output,
+base_path = /path/to/megadepth,
+pairs_per_scene = 300,
+crop_image_size = 512
+
+booster = FeatureBooster(
+config[feature] = 
+SIFT+Boost-F: 
+    keypoint_dim: 4
+    keypoint_encoder: [32, 64, 128, 128]
+    descriptor_encoder: [256, 128]
+    descriptor_dim: 128
+    Attentional_layers: 4
+    last_activation:
+    l2_normalization: true
+    output_dim: 128 ,
+
+use_kenc=True,
+use_cross = True,
+use_mha = False,
+)
+
+optimizer = adamw
+
+process_epoch(dataloader, booster, optimizer, start_epoch - 1, train = True)
+
+colmap을 이용해서 3d로 재구성한 이미지는 저장안했지만 이때 추출된 3D 정보를 저장했고
+그 저장된 정보를 data로 가져와서 사용
+
+kps1 , kps2 = 이미지1과 이미지2에서 각각 검출된 특징점의 좌표
+
+normalized_kps1, normalized_kps2: 특징점의 좌표를 정규화한 값입니다. 
+정규화는 보통 카메라의 내부 파라미터를 이용하여 수행
+
+descs1, descs2: 각 특징점에 대한 설명자(descriptor)입니다. 
+설명자는 특징점 주변의 작은 패치를 기반으로 계산되며,
+이 패치의 정보를 요약한 벡터입니다.
+
+intrinsics1, intrinsics2: 카메라의 내부 파라미터 행렬입니다. 
+이 행렬은 카메라의 초점 거리(focal length)와 주점(principal point) 등을 포함하고 있으며, 
+이미지를 3D 공간으로 재구성하는 데 필요합니다.
+
+pose1, pose2: 각 이미지의 카메라 포즈입니다. 
+카메라 포즈는 카메라의 위치와 방향을 나타내며, 4x4 변환 행렬로 표현됩니다. 
+이 행렬은 3D 공간에서의 카메라의 위치와 방향, 그리고 스케일을 결정합니다.
+
+bbox1, bbox2: 각 이미지에서의 관심 영역(bounding box)을 나타내는 좌표입니다.
+이는 재구성 과정에서 특정 영역에 초점을 맞추기 위해 사용될 수 있습니다.
+
+descs1_refine = booster((descs1 * 2.0 - 1.0), normalized_kps1) if ('orb' in args.descriptor) else booster(descs1, normalized_kps1)
+descs2_refine = booster((descs2 * 2.0 - 1.0), normalized_kps2) if ('orb' in args.descriptor) else booster(descs2, normalized_kps2)
+ 이미지의 특징점들을 더 잘 대응시키기 위해 설명자의 표현력을 강화하는 데 목적
+
+booster(config, dropout=False, p=0.1, use_kenc=True, use_cross=True, use_mha=False)
+
+def MLP(channels: List[int], do_bn: bool = False) -> nn.Module:
+    Sequential(
+  (0): Linear(in_features=128, out_features=256, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=256, out_features=128, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=128, out_features=128, bias=True)
+)
+
+self.kenc =  KeypointEncoder(
+              self.config['keypoint_dim'] : 4,
+	self.config['descriptor_dim'] : 128,
+ 	self.config['keypoint_encoder'] : [32, 64, 128, 128], 
+	dropout=dropout
+
+	self.encoder = MLP([128] + : [256, 128] + [128])
+
+	forward(self, kpts):
+	     return self.encoder(kpts)
+
+)
+
+
+self.denc = DescriptorEncoder(
+               self.config['descriptor_dim'] : 128,
+	 self.config['descriptor_encoder'] : [256, 128],
+	 dropout=dropout)
+	
+	self.encoder = MLP([128] + : [256, 128] + [128])
+
+	forward((self, descs):
+	     residual = descs
+	     result residual + self.encoder(descs)
+)
+
+class AFTAttention(nn.Module):
+	기존 어텐션 메커니즘:
+	일반적으로 쿼리(query), 키(key), 밸류(value)를 사용하여 어텐션 점수를 계산하고, 
+	소프트맥스(softmax)를 통해 어텐션 가중치를 구한 후, 이를 통해 밸류를 가중합하여 최종 출력을 만듭니다.	
+
+	쿼리는 b(배치사이즈),h(헤드개수),q(임베딩차원 수), d(헤드당 차원수) 이고
+	value도 b(배치사이즈),h(헤드개수),q(임베딩차원 수), d(헤드당 차원수) 이고
+
+	인데 qd랑 qk랑 dot product함
+
+	AFTAttention은 (batch_size, seq_length, d_model)
+	seq_length에서만 계산함
+
+class PositionwiseFeedForward(nn.Module):
+	self.mlp = MLP([128, 128*2, 128])
+	
+	forward(x):
+	     residual = x
+        	     x = self.mlp(x)
+	     x += residual
+        	     x = self.layer_norm(x)
+
+
+class AttentionLayer(nn.Module):
+	self.attn = AFTAttention(feature_dim, dropout=dropout, p=p)
+
+            self.ffn = PositionwiseFeedForward(feature_dim, dropout=dropout, p=p)
+	
+	def forward(self, x: torch.Tensor) -> torch.Tensor:
+       	     x = self.attn(x)
+	     x = self.ffn(x)
+        	     return x
+
+	self.attn_proj = AttentionalNN(
+              feature_dim=128, layer_num=4, use_mha=False, dropout=False)
+
+	forward(desc):
+	     AttentionalLayer(feature_dim, use_mha=use_mha, dropout=dropout, p=p)
+	     AttentionalLayer(feature_dim, use_mha=use_mha, dropout=dropout, p=p)
+                 AttentionalLayer(feature_dim, use_mha=use_mha, dropout=dropout, p=p)
+	     AttentionalLayer(feature_dim, use_mha=use_mha, dropout=dropout, p=p)
+
+
+self.config['descriptor_dim'] : 128
+self.config['output_dim']) : 128
+self.use_dropout = dropout
+self.dropout = nn.Dropout(p=p)
+self.layer_norm = nn.LayerNorm(self.config['descriptor_dim'] : 128, eps=1e-6)
+self.last_activation = nn.ReLU()
+
+forward(self, desc, kpts):
+## Self boosting
+# Descriptor MLP encoder
+desc = self.denc(desc)
+
+# Geometric MLP encoder
+desc = desc + self.kenc(kpts)
+
+## Cross boosting
+# Multi-layer Transformer network.
+desc = self.attn_proj(self.layer_norm(desc))
+
+ ## Post processing
+ # Final MLP projection
+desc = self.final_proj(desc) #걍 선형레이어 1개
+desc = self.last_activation(desc)
+
+# L2 normalization
+desc = F.normalize(desc, dim=-1)
+
+return desc
+
